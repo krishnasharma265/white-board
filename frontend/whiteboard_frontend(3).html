@@ -1,0 +1,1261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sketchroom — Collaborative Whiteboard</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=IBM+Plex+Mono:wght@400;500&family=Lato:wght@300;400;700&display=swap" rel="stylesheet">
+<style>
+/* ─── TOKENS ──────────────────────────────────────────── */
+:root{
+  --ink:#0a0a0f;
+  --ink2:#13131c;
+  --ink3:#1c1c28;
+  --ink4:#282838;
+  --line:#2e2e42;
+  --line2:#3a3a52;
+  --muted:#5a5a78;
+  --dim:#8888a8;
+  --body:#c8c8e0;
+  --bright:#e8e8f8;
+  --white:#f4f4fc;
+
+  --lime:#b8ff5c;
+  --lime-dim:rgba(184,255,92,.12);
+  --red:#ff5c7a;
+  --red-dim:rgba(255,92,122,.10);
+  --sky:#5cb8ff;
+  --sky-dim:rgba(92,184,255,.10);
+  --amber:#ffba5c;
+  --amber-dim:rgba(255,186,92,.10);
+  --violet:#a05cff;
+  --violet-dim:rgba(160,92,255,.12);
+
+  --canvas-bg:#f5f4ee;
+
+  --r4:4px; --r8:8px; --r12:12px; --r16:16px; --r24:24px;
+  --shadow:0 12px 40px rgba(0,0,0,.5);
+  --shadow-sm:0 4px 16px rgba(0,0,0,.35);
+
+  --mono:'IBM Plex Mono',monospace;
+  --display:'Syne',sans-serif;
+  --text:'Lato',sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden;background:var(--ink)}
+body{font-family:var(--text);color:var(--body);font-size:13px}
+
+/* ─── SCROLLBARS ──────────────────────────────────────── */
+::-webkit-scrollbar{width:4px;height:4px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--line2);border-radius:4px}
+
+/* ─── ANIMATIONS ──────────────────────────────────────── */
+@keyframes fadeUp{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+@keyframes scaleIn{from{opacity:0;transform:scale(.94)}to{opacity:1;transform:scale(1)}}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes glow{0%,100%{box-shadow:0 0 0 0 rgba(184,255,92,.4)}50%{box-shadow:0 0 0 8px rgba(184,255,92,0)}}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0.2}}
+@keyframes slidein{from{opacity:0;transform:translateX(12px)}to{opacity:1;transform:translateX(0)}}
+
+/* ─── AUTH OVERLAY ────────────────────────────────────── */
+#auth-overlay{
+  position:fixed;inset:0;z-index:999;
+  display:flex;align-items:center;justify-content:center;
+  background:var(--ink);
+}
+.auth-grid-bg{
+  position:absolute;inset:0;overflow:hidden;pointer-events:none;
+  background-image:
+    linear-gradient(var(--line) 1px,transparent 1px),
+    linear-gradient(90deg,var(--line) 1px,transparent 1px);
+  background-size:48px 48px;
+  opacity:.3;
+  mask-image:radial-gradient(ellipse 80% 80% at 50% 50%,#000 40%,transparent 100%);
+}
+.auth-glow{
+  position:absolute;width:500px;height:500px;border-radius:50%;
+  background:radial-gradient(circle,rgba(184,255,92,.07) 0%,transparent 65%);
+  top:50%;left:50%;transform:translate(-50%,-50%);
+  pointer-events:none;
+}
+.auth-card{
+  position:relative;z-index:1;
+  width:440px;
+  background:var(--ink2);
+  border:1px solid var(--line);
+  border-radius:var(--r16);
+  padding:44px 40px 36px;
+  box-shadow:var(--shadow);
+  animation:scaleIn .35s cubic-bezier(.16,1,.3,1);
+}
+.auth-wordmark{
+  display:flex;align-items:center;gap:10px;
+  margin-bottom:30px;
+}
+.auth-wordmark-icon{
+  width:34px;height:34px;background:var(--lime);border-radius:var(--r8);
+  display:flex;align-items:center;justify-content:center;
+  font-family:var(--mono);font-size:14px;font-weight:500;color:var(--ink);
+}
+.auth-wordmark-text{
+  font-family:var(--display);font-size:18px;font-weight:800;
+  color:var(--bright);letter-spacing:-.3px;
+}
+.auth-wordmark-tag{
+  margin-left:auto;font-family:var(--mono);font-size:9px;letter-spacing:2px;
+  text-transform:uppercase;color:var(--muted);
+  background:var(--ink3);border:1px solid var(--line);
+  padding:3px 8px;border-radius:20px;
+}
+
+/* tab switcher */
+.auth-tabs{display:flex;gap:2px;background:var(--ink3);border-radius:var(--r8);padding:3px;margin-bottom:28px}
+.auth-tab{
+  flex:1;padding:8px;border:none;background:none;
+  font-family:var(--display);font-size:13px;font-weight:600;
+  color:var(--dim);cursor:pointer;border-radius:6px;transition:all .18s;
+}
+.auth-tab.on{background:var(--ink4);color:var(--bright);box-shadow:0 1px 4px rgba(0,0,0,.3)}
+
+/* field */
+.field{margin-bottom:18px}
+.field-label{
+  display:block;font-family:var(--mono);font-size:10px;
+  letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);
+  margin-bottom:7px;
+}
+.field-wrap{position:relative}
+.field-input{
+  width:100%;padding:11px 14px;
+  background:var(--ink3);border:1px solid var(--line);border-radius:var(--r8);
+  color:var(--bright);font-family:var(--text);font-size:14px;
+  outline:none;transition:border-color .18s, box-shadow .18s;
+}
+.field-input:focus{border-color:var(--lime);box-shadow:0 0 0 3px rgba(184,255,92,.1)}
+.field-input::placeholder{color:var(--muted)}
+
+/* submit btn */
+.btn-submit{
+  width:100%;padding:13px;margin-top:4px;
+  background:var(--lime);border:none;border-radius:var(--r8);
+  color:var(--ink);font-family:var(--display);font-size:14px;font-weight:700;
+  cursor:pointer;transition:all .18s;letter-spacing:.3px;
+}
+.btn-submit:hover{background:#ccff6a;transform:translateY(-1px);box-shadow:0 6px 20px rgba(184,255,92,.3)}
+.btn-submit:active{transform:translateY(0)}
+.btn-submit:disabled{opacity:.45;cursor:not-allowed;transform:none}
+
+/* inline msg */
+.auth-msg{
+  margin-top:12px;padding:10px 14px;border-radius:var(--r8);
+  font-size:12px;font-family:var(--mono);display:none;
+}
+.auth-msg.err{background:var(--red-dim);border:1px solid rgba(255,92,122,.25);color:var(--red)}
+.auth-msg.ok{background:var(--lime-dim);border:1px solid rgba(184,255,92,.25);color:var(--lime)}
+.auth-msg.show{display:block;animation:fadeIn .2s}
+
+/* token box */
+.token-box{
+  margin-top:16px;padding:14px;
+  background:var(--ink3);border:1px solid var(--lime);border-radius:var(--r8);
+  display:none;animation:fadeUp .25s;
+}
+.token-box.show{display:block}
+.token-box-hd{
+  display:flex;align-items:center;justify-content:space-between;
+  margin-bottom:8px;
+}
+.token-box-label{
+  font-family:var(--mono);font-size:10px;letter-spacing:1.5px;
+  text-transform:uppercase;color:var(--lime);
+}
+.btn-copy-token{
+  background:var(--ink4);border:1px solid var(--line2);border-radius:var(--r4);
+  color:var(--dim);font-family:var(--mono);font-size:10px;
+  padding:3px 10px;cursor:pointer;transition:all .15s;
+}
+.btn-copy-token:hover{border-color:var(--lime);color:var(--lime)}
+.token-val{
+  font-family:var(--mono);font-size:10px;color:var(--dim);
+  word-break:break-all;line-height:1.6;
+}
+.token-hint{
+  margin-top:10px;font-size:11px;color:var(--muted);
+}
+.btn-enter{
+  margin-top:12px;width:100%;padding:10px;
+  background:var(--ink4);border:1px solid var(--lime);border-radius:var(--r8);
+  color:var(--lime);font-family:var(--display);font-size:13px;font-weight:700;
+  cursor:pointer;transition:all .18s;letter-spacing:.5px;
+}
+.btn-enter:hover{background:var(--lime-dim)}
+
+/* ─── APP SHELL ───────────────────────────────────────── */
+#app{display:none;height:100vh;flex-direction:column}
+#app.on{display:flex}
+
+/* ─── TOPBAR ──────────────────────────────────────────── */
+.topbar{
+  height:54px;background:var(--ink2);border-bottom:1px solid var(--line);
+  display:flex;align-items:center;padding:0 16px;gap:12px;
+  flex-shrink:0;z-index:30;
+}
+.topbar-logo{
+  font-family:var(--display);font-size:17px;font-weight:800;
+  color:var(--bright);letter-spacing:-.4px;display:flex;align-items:center;gap:8px;
+}
+.topbar-logo-icon{
+  width:28px;height:28px;background:var(--lime);border-radius:var(--r4);
+  display:flex;align-items:center;justify-content:center;
+  font-family:var(--mono);font-size:12px;color:var(--ink);font-weight:500;
+}
+.topbar-div{width:1px;height:26px;background:var(--line)}
+
+/* room pill */
+.room-pill{
+  display:flex;align-items:center;gap:8px;
+  background:var(--ink3);border:1px solid var(--line);border-radius:20px;
+  padding:5px 6px 5px 12px;
+}
+.room-pill-lbl{font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:1px}
+.room-pill-input{
+  background:none;border:none;outline:none;
+  font-family:var(--mono);font-size:12px;color:var(--bright);width:110px;
+}
+.btn-go{
+  background:var(--lime);border:none;border-radius:14px;
+  color:var(--ink);font-family:var(--display);font-size:11px;font-weight:700;
+  padding:5px 14px;cursor:pointer;transition:all .15s;letter-spacing:.3px;
+}
+.btn-go:hover{background:#ccff6a}
+
+/* ws indicator */
+.ws-pill{
+  display:flex;align-items:center;gap:7px;
+  padding:5px 12px;border-radius:20px;
+  background:var(--ink3);border:1px solid var(--line);
+  font-family:var(--mono);font-size:10px;color:var(--muted);
+  letter-spacing:.5px;
+}
+.ws-dot{
+  width:7px;height:7px;border-radius:50%;
+  background:var(--muted);transition:background .3s;flex-shrink:0;
+}
+.ws-dot.conn{background:var(--lime);animation:glow 2s infinite}
+.ws-dot.cing{background:var(--amber);animation:blink .8s infinite}
+.ws-dot.err{background:var(--red)}
+
+.topbar-right{margin-left:auto;display:flex;align-items:center;gap:10px}
+.user-pill{
+  display:flex;align-items:center;gap:9px;
+  background:var(--ink3);border:1px solid var(--line);border-radius:20px;
+  padding:4px 14px 4px 6px;
+}
+.user-avatar{
+  width:26px;height:26px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  font-family:var(--display);font-size:11px;font-weight:700;color:var(--ink);
+  background:var(--lime);flex-shrink:0;
+}
+.user-name-pill{font-size:12px;font-weight:700;color:var(--bright)}
+.btn-logout{
+  background:none;border:1px solid var(--line);border-radius:var(--r4);
+  color:var(--dim);font-family:var(--mono);font-size:10px;letter-spacing:.5px;
+  padding:5px 12px;cursor:pointer;transition:all .15s;
+}
+.btn-logout:hover{border-color:var(--red);color:var(--red)}
+/* token bar btn */
+.btn-show-token{
+  background:var(--lime-dim);border:1px solid rgba(184,255,92,.2);border-radius:var(--r4);
+  color:var(--lime);font-family:var(--mono);font-size:10px;letter-spacing:.5px;
+  padding:5px 12px;cursor:pointer;transition:all .15s;
+}
+.btn-show-token:hover{background:rgba(184,255,92,.2)}
+
+/* ─── LAYOUT ──────────────────────────────────────────── */
+.layout{flex:1;display:flex;overflow:hidden}
+
+/* ─── SIDEBAR LEFT — USERS ────────────────────────────── */
+.sidebar-l{
+  width:198px;background:var(--ink2);border-right:1px solid var(--line);
+  display:flex;flex-direction:column;flex-shrink:0;
+}
+.sb-head{
+  padding:14px 14px 10px;border-bottom:1px solid var(--line);
+  font-family:var(--mono);font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--muted);
+  display:flex;align-items:center;gap:8px;
+}
+.online-ct{
+  margin-left:auto;background:var(--lime-dim);border:1px solid rgba(184,255,92,.2);
+  border-radius:10px;padding:1px 7px;color:var(--lime);font-size:10px;
+}
+.user-list{flex:1;overflow-y:auto;padding:8px}
+.user-row{
+  display:flex;align-items:center;gap:9px;padding:7px 8px;
+  border-radius:var(--r8);cursor:pointer;transition:background .15s;
+  border:1px solid transparent;margin-bottom:2px;
+}
+.user-row:hover{background:var(--ink3)}
+.user-row.selected{background:var(--ink3);border-color:var(--line2)}
+.u-dot{width:7px;height:7px;border-radius:50%;background:var(--lime);flex-shrink:0}
+.u-name{flex:1;font-size:12px;color:var(--bright);font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.u-me{font-size:9px;color:var(--muted);font-family:var(--mono)}
+.u-badge{
+  background:var(--red);color:#fff;border-radius:10px;
+  padding:1px 6px;font-size:9px;font-weight:700;font-family:var(--mono);
+  display:none;min-width:18px;text-align:center;
+}
+.u-badge.show{display:block}
+.u-pm-hint{font-size:9px;color:var(--sky);font-family:var(--mono);opacity:0;transition:opacity .15s}
+.user-row:hover .u-pm-hint{opacity:1}
+
+/* ─── CANVAS CENTER ───────────────────────────────────── */
+.canvas-wrap{flex:1;display:flex;flex-direction:column;overflow:hidden}
+.toolbar{
+  height:50px;background:var(--ink2);border-bottom:1px solid var(--line);
+  display:flex;align-items:center;gap:6px;padding:0 14px;flex-shrink:0;
+}
+.tool-btn{
+  width:34px;height:34px;border:1px solid transparent;border-radius:var(--r8);
+  background:none;color:var(--dim);cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  font-size:16px;transition:all .15s;flex-shrink:0;
+}
+.tool-btn:hover{background:var(--ink3);color:var(--bright)}
+.tool-btn.on{background:var(--ink3);border-color:var(--line2);color:var(--bright)}
+.tool-btn.on.lime{background:var(--lime-dim);border-color:rgba(184,255,92,.3);color:var(--lime)}
+.t-div{width:1px;height:26px;background:var(--line);flex-shrink:0;margin:0 2px}
+
+/* color swatches */
+.swatch{
+  width:22px;height:22px;border-radius:50%;border:2px solid transparent;
+  cursor:pointer;flex-shrink:0;transition:all .15s;
+}
+.swatch:hover{transform:scale(1.15)}
+.swatch.on{border-color:var(--bright);transform:scale(1.18)}
+
+/* size */
+.size-lbl{font-family:var(--mono);font-size:9px;color:var(--muted);letter-spacing:1px;white-space:nowrap}
+.size-range{accent-color:var(--lime);width:72px;cursor:pointer}
+
+/* clear */
+.btn-clear{
+  margin-left:auto;background:none;border:1px solid var(--line);border-radius:var(--r4);
+  color:var(--muted);font-family:var(--mono);font-size:9px;letter-spacing:1px;
+  padding:5px 10px;cursor:pointer;transition:all .15s;flex-shrink:0;
+}
+.btn-clear:hover{border-color:var(--red);color:var(--red)}
+
+canvas#board{
+  flex:1;display:block;cursor:crosshair;
+  background:var(--canvas-bg);
+  touch-action:none;
+}
+canvas#board.eraser{cursor:cell}
+
+/* ─── SIDEBAR RIGHT — CHAT ────────────────────────────── */
+.sidebar-r{
+  width:296px;background:var(--ink2);border-left:1px solid var(--line);
+  display:flex;flex-direction:column;flex-shrink:0;
+}
+.chat-tabs{display:flex;border-bottom:1px solid var(--line)}
+.chat-tab-btn{
+  flex:1;padding:14px 8px;border:none;background:none;
+  font-family:var(--display);font-size:12px;font-weight:700;
+  color:var(--muted);cursor:pointer;
+  border-bottom:2px solid transparent;transition:all .18s;
+  position:relative;
+}
+.chat-tab-btn.on{color:var(--bright);border-bottom-color:var(--lime)}
+.unread-badge{
+  display:inline-block;background:var(--red);color:#fff;
+  border-radius:10px;padding:1px 5px;font-size:9px;
+  font-family:var(--mono);margin-left:5px;vertical-align:middle;
+}
+
+/* chat panels */
+.chat-panel{flex:1;display:none;flex-direction:column;overflow:hidden}
+.chat-panel.on{display:flex}
+.pm-who{
+  padding:9px 14px;background:var(--ink3);border-bottom:1px solid var(--line);
+  font-size:11px;color:var(--muted);display:none;align-items:center;gap:8px;
+}
+.pm-who.on{display:flex}
+.pm-who strong{color:var(--sky)}
+.pm-who .no-sel{color:var(--muted);font-style:italic;font-size:11px;margin-left:auto}
+
+/* messages */
+.msg-list{
+  flex:1;overflow-y:auto;padding:12px 12px 6px;
+  display:flex;flex-direction:column;gap:8px;
+}
+.msg-item{animation:slidein .18s ease}
+.msg-meta{display:flex;align-items:baseline;gap:7px;margin-bottom:2px}
+.msg-author{font-family:var(--display);font-size:11px;font-weight:700}
+.msg-author.room-me{color:var(--lime)}
+.msg-author.room-other{color:var(--sky)}
+.msg-author.pm-s{color:var(--violet)}
+.msg-author.pm-r{color:var(--amber)}
+.msg-ts{font-family:var(--mono);font-size:9px;color:var(--muted)}
+.msg-body{
+  font-size:12px;color:var(--body);line-height:1.55;
+  padding-left:2px;word-break:break-word;
+}
+.msg-item.pm .msg-body{
+  background:rgba(160,92,255,.06);border-left:2px solid var(--violet);
+  padding:5px 9px;border-radius:0 var(--r4) var(--r4) 0;
+}
+/* typing */
+.typing-bar{
+  min-height:22px;padding:3px 12px;
+  font-size:11px;font-style:italic;color:var(--muted);
+  font-family:var(--mono);
+}
+/* input */
+.chat-input-wrap{
+  padding:10px 10px 12px;border-top:1px solid var(--line);
+  display:flex;gap:8px;align-items:flex-end;
+}
+.chat-textarea{
+  flex:1;background:var(--ink3);border:1px solid var(--line);
+  border-radius:var(--r8);color:var(--bright);
+  font-family:var(--text);font-size:13px;
+  padding:8px 11px;outline:none;resize:none;
+  max-height:96px;line-height:1.45;transition:border-color .18s;
+}
+.chat-textarea:focus{border-color:var(--lime)}
+.chat-textarea::placeholder{color:var(--muted)}
+.btn-send{
+  width:34px;height:34px;flex-shrink:0;
+  background:var(--lime);border:none;border-radius:var(--r8);
+  color:var(--ink);cursor:pointer;transition:all .15s;
+  display:flex;align-items:center;justify-content:center;font-size:14px;
+}
+.btn-send:hover{background:#ccff6a}
+.btn-send:disabled{opacity:.35;cursor:not-allowed}
+
+/* ─── TOKEN FLOATER ───────────────────────────────────── */
+#token-floater{
+  position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(20px);
+  z-index:500;
+  background:var(--ink2);border:1px solid var(--line);
+  border-radius:var(--r12);padding:12px 16px;
+  display:none;align-items:center;gap:14px;
+  box-shadow:var(--shadow);max-width:92vw;min-width:360px;
+  animation:fadeUp .3s cubic-bezier(.16,1,.3,1) both;
+}
+#token-floater.on{display:flex}
+.tf-col{flex:1;overflow:hidden}
+.tf-label{font-family:var(--mono);font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--lime);margin-bottom:4px}
+.tf-val{font-family:var(--mono);font-size:10px;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.btn-tf-copy{
+  background:var(--ink3);border:1px solid var(--line2);border-radius:var(--r4);
+  color:var(--dim);font-family:var(--mono);font-size:10px;letter-spacing:.5px;
+  padding:5px 12px;cursor:pointer;transition:all .15s;flex-shrink:0;white-space:nowrap;
+}
+.btn-tf-copy:hover{border-color:var(--lime);color:var(--lime)}
+.btn-tf-close{
+  background:none;border:none;color:var(--muted);cursor:pointer;
+  font-size:18px;flex-shrink:0;line-height:1;
+  transition:color .15s;padding:0 0 0 2px;
+}
+.btn-tf-close:hover{color:var(--bright)}
+
+/* ─── TOASTS ──────────────────────────────────────────── */
+#toasts{position:fixed;top:14px;right:14px;z-index:999;display:flex;flex-direction:column;gap:8px}
+.toast-item{
+  background:var(--ink2);border:1px solid var(--line);border-radius:var(--r8);
+  padding:10px 16px;font-size:12px;font-family:var(--mono);
+  min-width:200px;box-shadow:var(--shadow-sm);
+  animation:slidein .22s ease;
+}
+.toast-item.ok{border-color:rgba(184,255,92,.4);color:var(--lime)}
+.toast-item.err{border-color:rgba(255,92,122,.4);color:var(--red)}
+.toast-item.info{border-color:rgba(92,184,255,.3);color:var(--sky)}
+</style>
+</head>
+<body>
+
+<!-- ═══════════════ AUTH OVERLAY ═══════════════ -->
+<div id="auth-overlay">
+  <div class="auth-grid-bg"></div>
+  <div class="auth-glow"></div>
+  <div class="auth-card">
+    <div class="auth-wordmark">
+      <div class="auth-wordmark-icon">Sr</div>
+      <div class="auth-wordmark-text">Sketchroom</div>
+      <div class="auth-wordmark-tag">v1.0</div>
+    </div>
+
+    <div class="auth-tabs">
+      <button class="auth-tab on" id="tab-login" onclick="switchTab('login')">Login</button>
+      <button class="auth-tab" id="tab-signup" onclick="switchTab('signup')">Sign Up</button>
+    </div>
+
+    <!-- LOGIN -->
+    <div id="pane-login">
+      <div class="field">
+        <label class="field-label">Username</label>
+        <div class="field-wrap"><input class="field-input" id="l-user" type="text" placeholder="your_username" autocomplete="username"></div>
+      </div>
+      <div class="field">
+        <label class="field-label">Password</label>
+        <div class="field-wrap"><input class="field-input" id="l-pass" type="password" placeholder="••••••••" autocomplete="current-password"></div>
+      </div>
+      <button class="btn-submit" id="btn-login" onclick="doLogin()">Login →</button>
+      <div class="auth-msg" id="l-msg"></div>
+      <div class="token-box" id="l-token-box">
+        <div class="token-box-hd">
+          <span class="token-box-label">🔑 Access Token</span>
+          <button class="btn-copy-token" onclick="copyToken('l-token-val')">Copy</button>
+        </div>
+        <div class="token-val" id="l-token-val"></div>
+        <div class="token-hint">Your JWT token — keep it secret, or copy it for API use.</div>
+        <button class="btn-enter" onclick="enterApp()">Enter Sketchroom →</button>
+      </div>
+    </div>
+
+    <!-- SIGNUP -->
+    <div id="pane-signup" style="display:none">
+      <div class="field">
+        <label class="field-label">Username</label>
+        <div class="field-wrap"><input class="field-input" id="s-user" type="text" placeholder="choose_username" autocomplete="username"></div>
+      </div>
+      <div class="field">
+        <label class="field-label">Password</label>
+        <div class="field-wrap"><input class="field-input" id="s-pass" type="password" placeholder="••••••••" autocomplete="new-password"></div>
+      </div>
+      <button class="btn-submit" id="btn-signup" onclick="doSignup()">Create Account →</button>
+      <div class="auth-msg" id="s-msg"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════ APP ═══════════════ -->
+<div id="app">
+  <!-- Topbar -->
+  <div class="topbar">
+    <div class="topbar-logo">
+      <div class="topbar-logo-icon">Sr</div>
+      Sketchroom
+    </div>
+    <div class="topbar-div"></div>
+    <div class="room-pill">
+      <span class="room-pill-lbl">ROOM /</span>
+      <input class="room-pill-input" id="room-input" type="text" value="main" placeholder="room-name">
+      <button class="btn-go" onclick="connectRoom()">Join</button>
+    </div>
+    <div class="ws-pill">
+      <div class="ws-dot" id="ws-dot"></div>
+      <span id="ws-lbl">disconnected</span>
+    </div>
+    <div class="topbar-right">
+      <button class="btn-show-token" onclick="toggleTokenFloater()">Token</button>
+      <div class="user-pill">
+        <div class="user-avatar" id="top-av"></div>
+        <span class="user-name-pill" id="top-uname"></span>
+      </div>
+      <button class="btn-logout" onclick="logout()">Logout</button>
+    </div>
+  </div>
+
+  <div class="layout">
+    <!-- Left: Online Users -->
+    <div class="sidebar-l">
+      <div class="sb-head">
+        Online <span class="online-ct" id="online-ct">0</span>
+      </div>
+      <div class="user-list" id="user-list"></div>
+    </div>
+
+    <!-- Center: Canvas -->
+    <div class="canvas-wrap">
+      <div class="toolbar">
+        <!-- Tools -->
+        <button class="tool-btn on lime" id="tb-pen"   onclick="setTool('pen')"   title="Pen (P)">✏️</button>
+        <button class="tool-btn"         id="tb-line"  onclick="setTool('line')"  title="Line (L)">📏</button>
+        <button class="tool-btn"         id="tb-rect"  onclick="setTool('rect')"  title="Rect (R)">⬜</button>
+        <button class="tool-btn"         id="tb-erase" onclick="setTool('erase')" title="Eraser (E)">🧹</button>
+        <div class="t-div"></div>
+        <!-- Colors -->
+        <div class="swatch on"  style="background:#1a1a2a" onclick="setColor('#1a1a2a',this)" title="Black"></div>
+        <div class="swatch"     style="background:#ff5c7a" onclick="setColor('#ff5c7a',this)" title="Red"></div>
+        <div class="swatch"     style="background:#5cb8ff" onclick="setColor('#5cb8ff',this)" title="Blue"></div>
+        <div class="swatch"     style="background:#b8ff5c" onclick="setColor('#b8ff5c',this)" title="Lime"></div>
+        <div class="swatch"     style="background:#ffba5c" onclick="setColor('#ffba5c',this)" title="Amber"></div>
+        <div class="swatch"     style="background:#a05cff" onclick="setColor('#a05cff',this)" title="Violet"></div>
+        <div class="swatch"     style="background:#5cffd4" onclick="setColor('#5cffd4',this)" title="Teal"></div>
+        <div class="swatch"     style="background:#ffffff" onclick="setColor('#ffffff',this)" title="White"></div>
+        <input type="color" id="custom-color" style="width:22px;height:22px;border-radius:50%;border:2px solid var(--line2);cursor:pointer;background:none;padding:0" title="Custom colour" onchange="setColor(this.value)">
+        <div class="t-div"></div>
+        <!-- Size -->
+        <span class="size-lbl">SIZE</span>
+        <input class="size-range" type="range" id="size-range" min="1" max="32" value="4">
+        <span class="size-lbl" id="size-val">4</span>
+        <div class="t-div"></div>
+        <button class="btn-clear" onclick="clearBoard()">✕ CLEAR</button>
+      </div>
+      <canvas id="board"></canvas>
+    </div>
+
+    <!-- Right: Chat -->
+    <div class="sidebar-r">
+      <div class="chat-tabs">
+        <button class="chat-tab-btn on" id="ctb-room"    onclick="switchChat('room')">Room</button>
+        <button class="chat-tab-btn"    id="ctb-private" onclick="switchChat('private')">
+          Private <span class="unread-badge" id="pm-unread-badge" style="display:none"></span>
+        </button>
+      </div>
+
+      <!-- ROOM chat -->
+      <div class="chat-panel on" id="panel-room">
+        <div class="msg-list" id="room-msgs"></div>
+        <div class="typing-bar" id="room-typing"></div>
+        <div class="chat-input-wrap">
+          <textarea class="chat-textarea" id="room-input-msg" placeholder="Message the room…" rows="1"
+            onkeydown="roomKey(event)" oninput="roomType(this)"></textarea>
+          <button class="btn-send" onclick="sendRoom()" title="Send (Enter)">➤</button>
+        </div>
+      </div>
+
+      <!-- PRIVATE chat -->
+      <div class="chat-panel" id="panel-private">
+        <div class="pm-who on" id="pm-who">
+          <div class="u-dot"></div>
+          <strong id="pm-target-name">—</strong>
+          <span class="no-sel" id="pm-no-sel">← select a user</span>
+        </div>
+        <div class="msg-list" id="pm-msgs"></div>
+        <div class="typing-bar" id="pm-typing"></div>
+        <div class="chat-input-wrap">
+          <textarea class="chat-textarea" id="pm-input-msg" placeholder="Private message…" rows="1"
+            onkeydown="pmKey(event)" oninput="pmType(this)"></textarea>
+          <button class="btn-send" onclick="sendPm()" title="Send (Enter)">➤</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Token Floater -->
+<div id="token-floater">
+  <div class="tf-col">
+    <div class="tf-label">JWT Token</div>
+    <div class="tf-val" id="tf-val"></div>
+  </div>
+  <button class="btn-tf-copy" onclick="copyToken('tf-val')">Copy</button>
+  <button class="btn-tf-close" onclick="document.getElementById('token-floater').classList.remove('on')">✕</button>
+</div>
+
+<!-- Toasts -->
+<div id="toasts"></div>
+
+<script>
+/* ══════════════════════════════════════════════════════
+   CONFIG
+══════════════════════════════════════════════════════ */
+const API = 'http://127.0.0.1:8000';
+const WS  = 'ws://127.0.0.1:8000';
+
+/* ══════════════════════════════════════════════════════
+   STATE
+══════════════════════════════════════════════════════ */
+let token   = null;
+let me      = null;      // current username
+let ws      = null;
+let room    = 'main';
+
+// drawing
+let drawing = false;
+let lx=0, ly=0;
+let sx=0, sy=0;         // start x/y for shapes
+let tool    = 'pen';
+let color   = '#1a1a2a';
+let size    = 4;
+let snapshot= null;     // for shape preview
+let pathBuffer  = [];   // all points in current stroke
+let sendInterval= null; // preview flush timer (16ms)
+let lastSentPt  = null; // last flushed point for bridging within a stroke
+let strokeId    = 0;    // increments each mousedown
+
+// chat
+let pmTarget = null;
+let pmStore  = {};      // { username: [{sender,content,mine,ts}] }
+let pmUnread = {};
+let onlineUsers = [];
+
+// typing debounce
+let roomTypingTimer = null;
+let pmTypingTimer   = null;
+let isRoomTyping    = false;
+let isPmTyping      = false;
+
+// heartbeat
+let pingInterval = null;
+
+/* ══════════════════════════════════════════════════════
+   AUTH HELPERS
+══════════════════════════════════════════════════════ */
+function switchTab(t) {
+  document.getElementById('tab-login').classList.toggle('on', t==='login');
+  document.getElementById('tab-signup').classList.toggle('on', t==='signup');
+  document.getElementById('pane-login').style.display  = t==='login'  ? '' : 'none';
+  document.getElementById('pane-signup').style.display = t==='signup' ? '' : 'none';
+}
+
+function showMsg(id, type, msg) {
+  const el = document.getElementById(id);
+  el.className = 'auth-msg ' + type + ' show';
+  el.textContent = msg;
+}
+
+async function apiPost(path, body) {
+  const r = await fetch(API+path, {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify(body)
+  });
+  const d = await r.json();
+  if(!r.ok) throw new Error(d.detail || 'Error');
+  return d;
+}
+
+async function doSignup() {
+  const u = document.getElementById('s-user').value.trim();
+  const p = document.getElementById('s-pass').value;
+  if(!u||!p){ showMsg('s-msg','err','Fill in all fields'); return; }
+  const btn = document.getElementById('btn-signup');
+  btn.disabled = true; btn.textContent = 'Creating…';
+  try {
+    await apiPost('/auth/signup', {username:u, password:p});
+    showMsg('s-msg','ok','Account created! Switching to login…');
+    setTimeout(()=>{ switchTab('login'); document.getElementById('l-user').value=u; }, 900);
+  } catch(e){ showMsg('s-msg','err', e.message); }
+  finally { btn.disabled=false; btn.textContent='Create Account →'; }
+}
+
+async function doLogin() {
+  const u = document.getElementById('l-user').value.trim();
+  const p = document.getElementById('l-pass').value;
+  if(!u||!p){ showMsg('l-msg','err','Fill in all fields'); return; }
+  const btn = document.getElementById('btn-login');
+  btn.disabled=true; btn.textContent='Logging in…';
+  try {
+    const d = await apiPost('/auth/login', {username:u, password:p});
+    token = d.access_token;
+    me    = u;
+    // show token
+    document.getElementById('l-token-val').textContent = token;
+    document.getElementById('l-token-box').classList.add('show');
+    showMsg('l-msg','ok','Logged in! Your token is shown below.');
+  } catch(e){ showMsg('l-msg','err', e.message); }
+  finally { btn.disabled=false; btn.textContent='Login →'; }
+}
+
+function enterApp() {
+  document.getElementById('auth-overlay').style.display = 'none';
+  document.getElementById('app').classList.add('on');
+  document.getElementById('top-uname').textContent = me;
+  document.getElementById('top-av').textContent = me[0].toUpperCase();
+  document.getElementById('tf-val').textContent = token;
+  initCanvas();
+  connectRoom();
+}
+
+function logout() {
+  if(ws) ws.close();
+  clearInterval(pingInterval);
+  ws=null; token=null; me=null; room='main'; pmTarget=null;
+  pmStore={}; pmUnread={}; onlineUsers=[];
+  document.getElementById('auth-overlay').style.display='';
+  document.getElementById('app').classList.remove('on');
+  document.getElementById('l-token-box').classList.remove('show');
+  document.getElementById('l-msg').classList.remove('show');
+  document.getElementById('s-msg').classList.remove('show');
+  document.getElementById('l-pass').value='';
+  clearCanvas();
+}
+
+function copyToken(elId) {
+  const val = document.getElementById(elId).textContent;
+  navigator.clipboard.writeText(val).then(()=>toast('Token copied!','ok'));
+}
+
+function toggleTokenFloater() {
+  document.getElementById('token-floater').classList.toggle('on');
+}
+
+/* ══════════════════════════════════════════════════════
+   WEBSOCKET
+══════════════════════════════════════════════════════ */
+function setWs(state, label) {
+  const d = document.getElementById('ws-dot');
+  d.className = 'ws-dot ' + state;
+  document.getElementById('ws-lbl').textContent = label;
+}
+
+function connectRoom() {
+  const r = document.getElementById('room-input').value.trim();
+  if(!r || !token) { toast('Login first','err'); return; }
+  if(ws) { ws.close(); ws=null; }
+  clearInterval(pingInterval);
+  room = r;
+  document.getElementById('room-msgs').innerHTML = '';
+  setWs('cing','connecting…');
+
+  ws = new WebSocket(`${WS}/ws/${encodeURIComponent(room)}?token=${encodeURIComponent(token)}`);
+
+  ws.onopen = () => {
+    setWs('conn', 'connected');
+    toast(`Joined #${room}`, 'ok');
+    // heartbeat every 30s
+    pingInterval = setInterval(()=>wsSend({type:'ping'}), 30000);
+  };
+
+  ws.onclose = () => {
+    setWs('', 'disconnected');
+    clearInterval(pingInterval);
+  };
+
+  ws.onerror = () => {
+    setWs('err','error');
+    toast('WebSocket error','err');
+  };
+
+  ws.onmessage = e => {
+    try { handleEvent(JSON.parse(e.data)); }
+    catch(_) {}
+  };
+}
+
+function wsSend(obj) {
+  if(ws && ws.readyState===WebSocket.OPEN) ws.send(JSON.stringify(obj));
+}
+
+function handleEvent(d) {
+  switch(d.type) {
+    case 'message':
+      appendRoomMsg(d.username, d.content); break;
+    case 'private_message':
+      incomingPm(d.sender, d.content); break;
+    case 'online_users':
+      renderUsers(d.users); break;
+    case 'typing':
+      if(d.username!==me) showTyping('room', d.username+' is typing…'); break;
+    case 'stop_typing':
+      if(d.username!==me) clearTyping('room'); break;
+    case 'private_typing':
+      if(d.username!==me && d.to===me) showTyping('pm', d.username+' is typing…'); break;
+    case 'private_stop_typing':
+      if(d.username!==me && d.to===me) clearTyping('pm'); break;
+    case 'draw':
+      remDraw(d); break;
+    case 'board_history':
+      if(d.events) d.events.forEach(ev=>remDraw(ev)); break;
+    case 'pong':
+      break; // heartbeat ack
+  }
+}
+
+/* ══════════════════════════════════════════════════════
+   ONLINE USERS
+══════════════════════════════════════════════════════ */
+function renderUsers(users) {
+  onlineUsers = users || [];
+  document.getElementById('online-ct').textContent = onlineUsers.length;
+  const ul = document.getElementById('user-list');
+  ul.innerHTML = onlineUsers.map(u=>{
+    const unread = pmUnread[u]||0;
+    const isSel  = u===pmTarget;
+    const isMe   = u===me;
+    return `<div class="user-row${isSel?' selected':''}" data-u="${esc(u)}" onclick="selectPmUser('${esc(u)}')">
+      <div class="u-dot"></div>
+      <span class="u-name">${esc(u)}</span>
+      ${isMe ? '<span class="u-me">(you)</span>' : '<span class="u-pm-hint">PM</span>'}
+      <span class="u-badge${unread?' show':''}">${unread||''}</span>
+    </div>`;
+  }).join('');
+}
+
+/* ══════════════════════════════════════════════════════
+   ROOM CHAT
+══════════════════════════════════════════════════════ */
+function appendRoomMsg(author, content) {
+  const box = document.getElementById('room-msgs');
+  const isMe = author===me;
+  const el = document.createElement('div');
+  el.className='msg-item';
+  el.innerHTML=`<div class="msg-meta">
+    <span class="msg-author ${isMe?'room-me':'room-other'}">${esc(author)}</span>
+    <span class="msg-ts">${nowTime()}</span>
+  </div>
+  <div class="msg-body">${esc(content)}</div>`;
+  box.appendChild(el);
+  box.scrollTop=box.scrollHeight;
+}
+
+function sendRoom() {
+  const inp = document.getElementById('room-input-msg');
+  const msg = inp.value.trim();
+  if(!msg) return;
+  wsSend({type:'message', content:msg});
+  inp.value=''; inp.style.height='';
+  stopRoomTyping();
+}
+
+function roomKey(e) {
+  if(e.key==='Enter'&&!e.shiftKey){ e.preventDefault(); sendRoom(); }
+}
+
+function roomType(el) {
+  el.style.height='auto';
+  el.style.height=Math.min(el.scrollHeight,96)+'px';
+  if(!isRoomTyping) {
+    isRoomTyping=true;
+    wsSend({type:'typing'});
+  }
+  clearTimeout(roomTypingTimer);
+  roomTypingTimer=setTimeout(stopRoomTyping, 2000);
+}
+
+function stopRoomTyping() {
+  if(isRoomTyping){ isRoomTyping=false; wsSend({type:'stop_typing'}); }
+}
+
+/* ══════════════════════════════════════════════════════
+   PRIVATE CHAT
+══════════════════════════════════════════════════════ */
+function selectPmUser(u) {
+  if(u===me) return;
+  pmTarget=u;
+  document.getElementById('pm-target-name').textContent=u;
+  document.getElementById('pm-no-sel').style.display='none';
+
+  // clear unread
+  pmUnread[u]=0;
+  updatePmBadge();
+  renderUsers(onlineUsers);
+
+  // render stored msgs
+  const box=document.getElementById('pm-msgs');
+  box.innerHTML='';
+  (pmStore[u]||[]).forEach(m=>appendPmMsgEl(box,m.sender,m.content,m.mine));
+  box.scrollTop=box.scrollHeight;
+
+  switchChat('private');
+  document.querySelectorAll('.user-row').forEach(r=>r.classList.toggle('selected',r.dataset.u===u));
+}
+
+function incomingPm(sender, content) {
+  if(!pmStore[sender]) pmStore[sender]=[];
+  pmStore[sender].push({sender,content,mine:false});
+  if(pmTarget===sender) {
+    const box=document.getElementById('pm-msgs');
+    appendPmMsgEl(box,sender,content,false);
+    box.scrollTop=box.scrollHeight;
+  } else {
+    pmUnread[sender]=(pmUnread[sender]||0)+1;
+    updatePmBadge();
+    renderUsers(onlineUsers);
+    toast(`DM from ${sender}`, 'info');
+  }
+}
+
+function appendPmMsgEl(box, sender, content, mine) {
+  const el=document.createElement('div');
+  el.className='msg-item pm';
+  el.innerHTML=`<div class="msg-meta">
+    <span class="msg-author ${mine?'pm-r':'pm-s'}">${esc(sender)}</span>
+    <span class="msg-ts">${nowTime()}</span>
+  </div>
+  <div class="msg-body">${esc(content)}</div>`;
+  box.appendChild(el);
+}
+
+function sendPm() {
+  if(!pmTarget){ toast('Select a user first','info'); return; }
+  const inp=document.getElementById('pm-input-msg');
+  const content=inp.value.trim();
+  if(!content) return;
+  wsSend({type:'private_message', to:pmTarget, content});
+  // echo locally
+  if(!pmStore[pmTarget]) pmStore[pmTarget]=[];
+  pmStore[pmTarget].push({sender:me,content,mine:true});
+  const box=document.getElementById('pm-msgs');
+  appendPmMsgEl(box,me,content,true);
+  box.scrollTop=box.scrollHeight;
+  inp.value=''; inp.style.height='';
+  stopPmTyping();
+}
+
+function pmKey(e){
+  if(e.key==='Enter'&&!e.shiftKey){ e.preventDefault(); sendPm(); }
+}
+
+function pmType(el) {
+  if(!pmTarget) return;
+  el.style.height='auto';
+  el.style.height=Math.min(el.scrollHeight,96)+'px';
+  if(!isPmTyping) {
+    isPmTyping=true;
+    wsSend({type:'private_typing', to:pmTarget});
+  }
+  clearTimeout(pmTypingTimer);
+  pmTypingTimer=setTimeout(stopPmTyping, 2000);
+}
+
+function stopPmTyping() {
+  if(isPmTyping&&pmTarget){ isPmTyping=false; wsSend({type:'private_stop_typing', to:pmTarget}); }
+}
+
+function updatePmBadge() {
+  const total=Object.values(pmUnread).reduce((a,b)=>a+b,0);
+  const el=document.getElementById('pm-unread-badge');
+  el.textContent=total; el.style.display=total?'':'none';
+}
+
+/* ══════════════════════════════════════════════════════
+   TYPING INDICATORS
+══════════════════════════════════════════════════════ */
+const _typingTO={};
+function showTyping(panel, text) {
+  const id = panel==='room'?'room-typing':'pm-typing';
+  document.getElementById(id).textContent=text;
+  clearTimeout(_typingTO[panel]);
+  _typingTO[panel]=setTimeout(()=>clearTyping(panel),3000);
+}
+function clearTyping(panel){
+  document.getElementById(panel==='room'?'room-typing':'pm-typing').textContent='';
+}
+
+/* ══════════════════════════════════════════════════════
+   CHAT PANEL SWITCH
+══════════════════════════════════════════════════════ */
+function switchChat(t) {
+  document.getElementById('ctb-room').classList.toggle('on',t==='room');
+  document.getElementById('ctb-private').classList.toggle('on',t==='private');
+  document.getElementById('panel-room').classList.toggle('on',t==='room');
+  document.getElementById('panel-private').classList.toggle('on',t==='private');
+}
+
+/* ══════════════════════════════════════════════════════
+   CANVAS / DRAWING
+══════════════════════════════════════════════════════ */
+let canvas, ctx;
+function initCanvas() {
+  canvas=document.getElementById('board');
+  ctx=canvas.getContext('2d');
+  resizeCanvas();
+  window.addEventListener('resize',resizeCanvas);
+
+  canvas.addEventListener('mousedown', onDown);
+  canvas.addEventListener('mousemove', onMove);
+  canvas.addEventListener('mouseup',    onUp);
+  canvas.addEventListener('mouseleave', onLeave);
+
+  canvas.addEventListener('touchstart', e=>{ e.preventDefault(); onDown(e.touches[0]); },{passive:false});
+  canvas.addEventListener('touchmove',  e=>{ e.preventDefault(); onMove(e.touches[0]); },{passive:false});
+  canvas.addEventListener('touchend',   onUp);
+
+  document.getElementById('size-range').addEventListener('input', e=>{
+    size=parseInt(e.target.value);
+    document.getElementById('size-val').textContent=size;
+  });
+
+  // keyboard shortcuts
+  document.addEventListener('keydown', e=>{
+    if(document.activeElement.tagName==='INPUT'||document.activeElement.tagName==='TEXTAREA') return;
+    if(e.key==='p'||e.key==='P') setTool('pen');
+    if(e.key==='l'||e.key==='L') setTool('line');
+    if(e.key==='r'||e.key==='R') setTool('rect');
+    if(e.key==='e'||e.key==='E') setTool('erase');
+  });
+}
+
+function resizeCanvas() {
+  if(!canvas) return;
+  const w=canvas.parentElement.clientWidth;
+  const h=canvas.parentElement.clientHeight;
+  const img=ctx.getImageData(0,0,canvas.width,canvas.height);
+  canvas.width=w; canvas.height=h;
+  ctx.fillStyle=getComputedStyle(document.documentElement).getPropertyValue('--canvas-bg').trim();
+  ctx.fillRect(0,0,w,h);
+  ctx.putImageData(img,0,0);
+}
+
+function pt(e) {
+  const r=canvas.getBoundingClientRect();
+  return {x:Math.round(e.clientX-r.left), y:Math.round(e.clientY-r.top)};
+}
+
+function onLeave(e) {
+  if(!drawing) return;
+  if(tool==='pen'||tool==='erase') {
+    clearInterval(sendInterval); sendInterval=null;
+    sendFullStroke(); pathBuffer=[]; lastSentPt=null; strokeId++; drawing=false;
+    drawing=false;
+  } else {
+    onUp(e);
+  }
+}
+
+function onDown(e) {
+  drawing=true;
+  strokeId++;
+  const p=pt(e);
+  lx=p.x; ly=p.y; sx=p.x; sy=p.y;
+  pathBuffer=[{x:p.x,y:p.y}];
+  lastSentPt=null;
+  if(tool==='line'||tool==='rect') {
+    snapshot=ctx.getImageData(0,0,canvas.width,canvas.height);
+  }
+  // no interval — we send the complete stroke on mouseup via sendFullStroke
+  sendInterval=null;
+}function onMove(e) {
+  if(!drawing) return;
+  const p=pt(e);
+  if(tool==='pen'||tool==='erase') {
+    // draw locally immediately (feels instant for the drawer)
+    const d={type:'draw',x1:lx,y1:ly,x2:p.x,y2:p.y,
+              color:tool==='erase'?getComputedStyle(document.documentElement).getPropertyValue('--canvas-bg').trim():color,
+              size:tool==='erase'?size*4:size};
+    drawLine(d);
+    // just buffer the point; flushPath() sends it
+    pathBuffer.push({x:p.x,y:p.y});
+    lx=p.x; ly=p.y;
+  } else if(tool==='line') {
+    ctx.putImageData(snapshot,0,0);
+    ctx.beginPath(); ctx.moveTo(sx,sy); ctx.lineTo(p.x,p.y);
+    ctx.strokeStyle=color; ctx.lineWidth=size; ctx.lineCap='round';
+    ctx.stroke();
+  } else if(tool==='rect') {
+    ctx.putImageData(snapshot,0,0);
+    ctx.beginPath(); ctx.rect(sx,sy,p.x-sx,p.y-sy);
+    ctx.strokeStyle=color; ctx.lineWidth=size;
+    ctx.stroke();
+  }
+}
+
+function onUp(e) {
+  if(!drawing) return;
+  drawing=false;
+  clearInterval(sendInterval);
+  sendInterval=null;
+
+  if(tool==='pen'||tool==='erase') {
+    // Send the COMPLETE stroke as one message — no loss, no gaps
+    sendFullStroke();
+    pathBuffer=[];
+    lastSentPt=null;
+  } else if((tool==='line'||tool==='rect') && e && e.clientX !== undefined) {
+    const p=pt(e);
+    wsSend({type:'draw', x1:sx, y1:sy, x2:p.x, y2:p.y, color, size, shape:tool});
+  }
+  snapshot=null;
+}
+
+// No live preview — sendFullStroke on mouseup sends the complete stroke reliably
+function flushPreview() { /* intentionally empty */ }
+
+// On mouseup: sends the COMPLETE stroke as ONE message with all points
+// One message = no reordering, no loss, no partial draws on receiver
+function sendFullStroke() {
+  const pts = pathBuffer;
+  if(pts.length < 2) return;
+  const c = tool==='erase'
+    ? getComputedStyle(document.documentElement).getPropertyValue('--canvas-bg').trim()
+    : color;
+  const s = tool==='erase' ? size*4 : size;
+  // Send all points in one WS message as a path
+  // Receiver iterates pts[i-1]->pts[i] to draw connected segments
+  wsSend({
+    type: 'draw',
+    path: pts,          // full ordered point array
+    color: c,
+    size: s,
+    sid: strokeId,
+    // x1,y1,x2,y2 still required by backend schema — use bounding values
+    x1: pts[0].x, y1: pts[0].y,
+    x2: pts[pts.length-1].x, y2: pts[pts.length-1].y
+  });
+}
+
+function drawLine(d) {
+  ctx.beginPath();
+  ctx.moveTo(d.x1,d.y1); ctx.lineTo(d.x2,d.y2);
+  ctx.strokeStyle=d.color; ctx.lineWidth=d.size;
+  ctx.lineCap='round'; ctx.lineJoin='round';
+  ctx.stroke();
+}
+
+function remDraw(d) {
+  if(d.shape==='rect') {
+    ctx.beginPath();
+    ctx.rect(d.x1, d.y1, d.x2-d.x1, d.y2-d.y1);
+    ctx.strokeStyle=d.color; ctx.lineWidth=d.size;
+    ctx.stroke();
+  } else if(d.shape==='line') {
+    ctx.beginPath();
+    ctx.moveTo(d.x1,d.y1); ctx.lineTo(d.x2,d.y2);
+    ctx.strokeStyle=d.color; ctx.lineWidth=d.size;
+    ctx.lineCap='round'; ctx.stroke();
+  } else if(d.path && d.path.length >= 2) {
+    // full stroke path array — draw as one continuous polyline, guaranteed complete
+    ctx.beginPath();
+    ctx.moveTo(d.path[0].x, d.path[0].y);
+    for(let i=1; i<d.path.length; i++) ctx.lineTo(d.path[i].x, d.path[i].y);
+    ctx.strokeStyle=d.color; ctx.lineWidth=d.size;
+    ctx.lineCap='round'; ctx.lineJoin='round';
+    ctx.stroke();
+  } else {
+    drawLine(d); // fallback for single segments
+  }
+}
+
+function clearBoard() {
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  ctx.fillStyle=getComputedStyle(document.documentElement).getPropertyValue('--canvas-bg').trim();
+  ctx.fillRect(0,0,canvas.width,canvas.height);
+}
+
+function setTool(t) {
+  tool=t;
+  ['pen','line','rect','erase'].forEach(id=>{
+    document.getElementById('tb-'+id).classList.toggle('on',id===t);
+    document.getElementById('tb-'+id).classList.toggle('lime',id===t);
+  });
+  canvas.classList.toggle('eraser',t==='erase');
+}
+
+function setColor(c, swatchEl) {
+  color=c;
+  document.querySelectorAll('.swatch').forEach(s=>s.classList.remove('on'));
+  if(swatchEl) swatchEl.classList.add('on');
+  setTool('pen');
+}
+
+/* ══════════════════════════════════════════════════════
+   UTILS
+══════════════════════════════════════════════════════ */
+function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function nowTime(){ return new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}); }
+
+function toast(msg, type='info') {
+  const el=document.createElement('div');
+  el.className='toast-item '+type;
+  el.textContent=msg;
+  document.getElementById('toasts').appendChild(el);
+  setTimeout(()=>el.remove(),3000);
+}
+
+/* Enter key on auth forms */
+document.addEventListener('keydown', e=>{
+  if(e.key!=='Enter') return;
+  if(!document.getElementById('pane-login').style.display && document.activeElement.closest('#pane-login')) doLogin();
+  else if(document.getElementById('pane-signup').style.display!=='none' && document.activeElement.closest('#pane-signup')) doSignup();
+});
+</script>
+</body>
+</html>
